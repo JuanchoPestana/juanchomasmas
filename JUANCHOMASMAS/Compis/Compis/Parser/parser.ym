@@ -1,0 +1,752 @@
+%{
+    
+    #import "ConectorParser.h"
+    #define YYERROR_VERBOSE 1
+    
+    int yylex(void);
+    void yyerror(char *s);
+    
+    extern FILE *yyin;
+    extern int yylineno;
+    %}
+
+%union
+{
+    int int_value;
+    float float_value;
+    char *string_value;
+    bool bool_value;
+}
+
+%locations
+%error-verbose
+
+
+
+
+%token PROGRAMA;
+%token <string_value> MAIN;
+%token FUNCION;
+%token VAR;
+%token RETURN;
+%token <bool_value> BOOLEAN;
+
+
+%token DOS_PUNTOS;
+%token PUNTO_COMA;
+
+
+%token IF;
+%token ELIF;
+%token ELSE;
+
+
+%token WHILE;
+
+
+%token PAREN_IZQ;
+%token PAREN_DER;
+%token BRACKET_IZQ;
+%token BRACKET_DER;
+%token LLAVE_IZQ;
+%token LLAVE_DER;
+
+
+%token OUTPUT;
+
+
+%token IGUAL;
+%token MENOR_QUE;
+%token MAYOR_QUE;
+%token NO_IGUAL;
+%token MENOR_IGUAL;
+%token MAYOR_IGUAL;
+%token IGUAL_IGUAL;
+
+
+%token AND;
+%token OR;
+
+
+%token <string_value> SUMA;
+%token <string_value> RESTA;
+%token <string_value> MULTIPLICACION;
+%token <string_value> DIVISION;
+
+%token <string_value> ID;
+%token <string_value> TYPE;
+%token <int_value> INT;
+%token <float_value> FLOAT;
+%token <string_value> STRING;
+
+
+%type <string_value> id
+%type <int_value> tipo_aux
+
+%%
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// INICIO DE PROGRAMA, AQUI SE DECLARAN VARIABLES GLOBALES Y FUNCIONES
+program:
+PROGRAMA DOS_PUNTOS {
+    
+    if (!parser_buscar_funcion([NSString stringWithFormat:@"programa"])) {
+        parser_agregar_funcion([NSString stringWithFormat:@"programa"], @"Programa");
+    } else {
+        parser_acumular_errores([NSString stringWithFormat:@"FUNCION DUPLICADA \n"]);
+    }
+    
+    parser_generar_cuadruplo_GOTO(99);
+} vars funciones main
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// MAIN DEL PROGRAMA
+main:
+MAIN {
+    if (!parser_agregar_funcion([NSString stringWithFormat:@"%s", $1], @"main")) {
+        parser_acumular_errores([NSString stringWithFormat:@"FUNCION DUPLICADA \n"]);
+    }
+} LLAVE_IZQ vars estatutos LLAVE_DER {
+    
+    parser_generar_cuadruplo_ENDFUNCTION();
+    parser_generar_cuadruplo_ENDPROGRAM();
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// FUNCIONES
+funciones:
+funcion funciones
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// DECLARACION DE UNA FUNCION, AGREGAR A TABLA DE FUNCIONES
+funcion:
+FUNCION TYPE ID {
+    
+    if (!parser_buscar_funcion([NSString stringWithFormat:@"%s", $3])) {
+        parser_agregar_funcion_sin_tipo([NSString stringWithFormat:@"%s", $3]);
+        parser_agregar_tipo_retorno([NSString stringWithFormat:@"%s", $3],[NSString stringWithFormat:@"%s", $2]);
+    } else {
+        parser_acumular_errores([NSString stringWithFormat:@"FUNCION DUPLICADA \n"]);
+    }
+} PAREN_IZQ TYPE ID {
+    
+    if (!parser_buscar_parametro([NSString stringWithFormat:@"%s", $7])) {
+        parser_agregar_variable([NSString stringWithFormat:@"%s", $7],[NSString stringWithFormat:@"%s", $6], true);
+    } else {
+        parser_acumular_errores([NSString stringWithFormat:@"VARIABLE DUPLICADA \n"]);
+    }
+} parametros PAREN_DER bloque{
+    parser_generar_cuadruplo_ENDFUNCTION();
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// PARAMETROS, BUSCAR EN TABLAS DE VARIABLES Y AGREGAR
+parametros:
+',' TYPE ID {
+    
+    if (!parser_buscar_parametro([NSString stringWithFormat:@"%s", $3])) {
+        parser_agregar_variable([NSString stringWithFormat:@"%s", $3],[NSString stringWithFormat:@"%s", $2], true);
+    } else {
+        parser_acumular_errores([NSString stringWithFormat:@"VARIABLE DUPLICADA \n"]);
+    }
+} parametros
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// RETURN DE UNA FUNCION, PERMITE REGRESAR UNA EXPRESION
+return:
+RETURN expresion_grande PUNTO_COMA {
+    if (!parser_generar_cuadruplo_RETURN()) {
+        parser_acumular_errores([NSString stringWithFormat:@"ERROR TIPO RETORNO \n"]);
+    }
+}
+| {
+    
+    if (!parser_generar_cuadruplo_VOIDRETURN()) {
+        parser_acumular_errores([NSString stringWithFormat:@"ERROR RETORNO \n"]);
+    }
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// BLOQUE
+bloque:
+LLAVE_IZQ vars estatutos return LLAVE_DER
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// LLAMADA DE UNA FUNCION, GENERA CUADRUPLO ERA, CUADRUPLO PARAM Y CUADRUPLO GOSUB
+llamada_funcion:
+ID {
+    if (parser_buscar_funcion([NSString stringWithFormat:@"%s", $1])) {
+        
+        parser_generar_cuadruplo_ERA([NSString stringWithFormat:@"%s", $1]);
+    } else {
+        parser_acumular_errores([NSString stringWithFormat:@"ERROR EN PARAMETRO \n"]);
+    }
+    
+} PAREN_IZQ expresion_grande {
+    
+    if (!parser_generar_cuadruplo_PARAMETRO(@"parametro")) {
+        parser_acumular_errores([NSString stringWithFormat:@"ERROR EN PARAMETRO \n"]);
+    }
+} parametros_recursivos PAREN_DER PUNTO_COMA {
+    
+    parser_generar_cuadruplo_GOSUB(@"llamada");
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// PERMITE TENER MAS DE UN PARAMETRO
+parametros_recursivos:
+',' expresion_grande {
+    
+    if (!parser_generar_cuadruplo_PARAMETRO(@"parametro")) {
+        parser_acumular_errores([NSString stringWithFormat:@"ERROR EN PARAMETRO \n"]);
+    }
+} parametros_recursivos
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// VARIABLES
+vars:
+var vars
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// DELCARAR VARIABLES Y ARREGLOS
+var:
+VAR TYPE ID tipo_aux PUNTO_COMA {
+    
+    if (!parser_buscar_variable([NSString stringWithFormat:@"%s", $3]) && $4 == 0) {
+        parser_agregar_variable([NSString stringWithFormat:@"%s", $3],[NSString stringWithFormat:@"%s", $2], false);
+    }
+    else if (!parser_buscar_variable([NSString stringWithFormat:@"%s", $3]) && $4 > 0) {
+        parser_agregar_arreglo([NSString stringWithFormat:@"%s", $3],[NSString stringWithFormat:@"%s", $2], $4);
+    }
+    else {
+        parser_acumular_errores([NSString stringWithFormat:@"VARIABLE DUPLICADA \n"]);
+    }
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// DECLARACION DE ARREGLOS
+tipo_aux:
+BRACKET_IZQ INT BRACKET_DER {
+    $$ = $2;
+}
+| { $$ = 0;}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// AGREGAR VARIABLE A PILA DE OPERACIONES Y AGREGAR CUADRUPLO ERA DE FUNCION
+id:
+ID {
+    if (parser_buscar_variable([NSString stringWithFormat:@"%s", $1])) {
+        parser_agregar_id_pila_operaciones([NSString stringWithFormat:@"%s", $1], @"Variable");
+    }
+    else if (parser_buscar_funcion([NSString stringWithFormat:@"%s", $1])) {
+        
+        parser_generar_cuadruplo_ERA([NSString stringWithFormat:@"%s", $1]);
+    }
+    else {
+        parser_acumular_errores([NSString stringWithFormat:@"VARIABLE NO EXISTE"]);
+    }
+} id_aux
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// VERIFICAR SI EXISTE EL ARREGLO, HACER LAS EXPRESIONES INTERNAS, LO MISMO SI ES UNA ASIGNACION DE UNA VARIABLE O UN PARAMETRO
+id_aux:
+BRACKET_IZQ {
+    parser_verificar_si_arreglo();
+    
+} exp {
+    parser_verificar_rango_expresion_arreglo();
+    
+} BRACKET_DER {
+    parser_agregar_gap_a_direccion_base();
+    
+}
+| PAREN_IZQ expresion_grande {
+    
+    parser_generar_cuadruplo_PARAMETRO(@"parametro");
+} parametros_recursivos PAREN_DER {
+    
+    parser_generar_cuadruplo_GOSUB(@"llamada");
+}
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// ASIGNACION DE VARIABLES, SE AGREGA SIGNO IGUAL A PILA DE OPERACIONES
+asignacion:
+id IGUAL {
+    parser_agregar_operador_pila_operaciones(@"=");
+} asigna PUNTO_COMA
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// PERMITE ASIGNAR VALOR DE UN ARREGLO A LAS VARIABLES
+asigna:
+BRACKET_IZQ asignaciones BRACKET_DER
+| expresion_grande{
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"asignacion"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR EN OPERACION \n"]);
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// TE PERMITE AGREGAR VALORES CONSTANTES
+asignaciones:
+constante asignaciones
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// VALORES CONSTANTES
+constante:
+
+INT {
+    parser_agregar_id_pila_operaciones([NSString stringWithFormat:@"%d", $1], @"Int");
+}
+| FLOAT {
+    parser_agregar_id_pila_operaciones([NSString stringWithFormat:@"%f", $1], @"Float");
+}
+| STRING {
+    parser_agregar_id_pila_operaciones([NSString stringWithFormat:@"%s", $1], @"String");
+}
+| BOOLEAN {
+    parser_agregar_id_pila_operaciones([NSString stringWithFormat:@"%d", $1], @"Bool");
+}
+| id
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// ESTATUTOS
+estatuto:
+asignacion
+| llamada_funcion
+| condicion
+| ciclo
+| output
+
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// PERMITIR QUE SEAN VARIOS ESTATUTOS
+estatutos:
+estatuto estatutos
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+//
+condicion:
+IF PAREN_IZQ expresion PAREN_DER  LLAVE_IZQ  {
+    parser_generar_cuadruplo_GOTOF(98);
+} estatutos {
+    parser_generar_cuadruplo_GOTO(98);
+} else_if LLAVE_DER {
+    parser_rellenar_condicion_end_cuadruplo();
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+//
+else_if:
+condicion_otra
+|else
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+//
+condicion_otra:
+ELIF PAREN_IZQ expresion PAREN_DER {
+    parser_generar_cuadruplo_GOTOF(98);
+} LLAVE_IZQ estatutos LLAVE_DER {
+    parser_generar_cuadruplo_GOTO(98);
+} else_if
+| else
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+//
+else:
+ELSE LLAVE_IZQ estatutos LLAVE_DER {
+    parser_rellenar_condicion_end_cuadruplo();
+}
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// GENERERAR CUADRUPLOS WHILE, GOTO EN FALSO, GOTO EN VERDADERO Y RELLENAR CUADRUPLO PENDIENTE
+ciclo:
+WHILE PAREN_IZQ {
+    parser_generar_cuadruplo_condicion_WHILE();
+} expresion {
+    parser_generar_cuadruplo_GOTOF(1);
+} PAREN_DER LLAVE_IZQ estatutos LLAVE_DER {
+    parser_generar_cuadruplo_GOTO(1);
+    parser_rellenar_cuadruplo_end_ciclo();
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// GENERA CUADRUPLO OUTPUT
+output:
+OUTPUT PAREN_IZQ expresion {
+    parser_generar_cuadruplo_OUTPUT([NSString stringWithFormat:@"OUTPUT"]);
+} PAREN_DER PUNTO_COMA
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// TRAER OPERADORES PILA OPERACIONES
+expresion_grande:
+expresion {
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"logico"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR OPERACION \n"]);
+} expresion_dos {
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"logico"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR OPERACION \n"]);
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// TRAER OPERADORES PILA OPERACIONES
+expresion:
+exp {
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"relacional"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR OPERACION \n"]);
+} expresion_tres {
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"relacional"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR OPERACION  \n"]);
+}
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// AGREGAR OPERADORES A PILA
+expresion_dos:
+AND {
+    parser_agregar_operador_pila_operaciones(@"&&");
+    
+} expresion
+| OR {
+    parser_agregar_operador_pila_operaciones(@"||");
+    
+} expresion
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// EXPRESIONES SUMA Y RESTA
+exp:
+termino {
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"suma_resta"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR OPERACION \n"]);
+} expresion_cuatro
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// OPERACIONES BOLEANAS
+expresion_tres:
+MAYOR_QUE {
+    parser_agregar_operador_pila_operaciones(@">");
+    
+} exp
+
+| MAYOR_IGUAL {
+    parser_agregar_operador_pila_operaciones(@">=");
+    
+} exp
+
+| MENOR_QUE {
+    parser_agregar_operador_pila_operaciones(@"<");
+    
+} exp
+
+| MENOR_IGUAL {
+    parser_agregar_operador_pila_operaciones(@"<=");
+    
+} exp
+
+| IGUAL_IGUAL {
+    parser_agregar_operador_pila_operaciones(@"==");
+    
+} exp
+
+| NO_IGUAL {
+    parser_agregar_operador_pila_operaciones(@"!=");
+    
+} exp
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// AGREGAR OPERADORES SUMA Y RESTA
+expresion_cuatro:
+
+SUMA {
+    parser_agregar_operador_pila_operaciones(@"+");
+    
+} exp
+
+| RESTA {
+    parser_agregar_operador_pila_operaciones(@"-");
+    
+} exp
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// OPERACIONES MULTIPLICACION Y DIVISION
+termino:
+factor {
+    if (!parser_buscar_siguiente_operador_pila_operaciones(@"multiplicacion_division"))
+    parser_acumular_errores([NSString stringWithFormat:@"ERROR OPERACION \n"]);
+} termino_dos
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// AGREGAR OPERADORES MULTIPLICACION Y DIVISION
+termino_dos:
+MULTIPLICACION {
+    parser_agregar_operador_pila_operaciones(@"*");
+    
+} termino
+| DIVISION {
+    parser_agregar_operador_pila_operaciones(@"/");
+    
+} termino
+|
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+
+
+///////////////////////////////////////////
+///////////////////////////////////////////
+// AGREGA PARENTESIS
+factor:
+PAREN_IZQ {
+    parser_agregar_operador_pila_operaciones(@"(");
+    
+} expresion PAREN_DER {
+    parser_borrar_parentesis_pila_operaciones();
+    
+}
+| SUMA constante
+| RESTA constante
+| constante
+;
+// END
+///////////////////////////////////////////
+///////////////////////////////////////////
+
+%%
+
+;
+;
+;
+;
+

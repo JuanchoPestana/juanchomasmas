@@ -1,0 +1,99 @@
+%{
+
+#import "ConectorParser.h"
+#import "y.tab.h"
+
+void yyerror(char *s);
+    
+%}
+
+%%
+
+
+programa {return PROGRAMA;}
+main {return MAIN;}
+return {return RETURN;}
+true|false {return BOOLEAN;}
+output {return OUTPUT;}
+
+
+var {return VAR;}
+funcion { return FUNCION;}
+
+
+[;] {return PUNTO_COMA;}
+: {return DOS_PUNTOS;}
+
+
+while {return WHILE;}
+
+
+if {return IF;}
+else {return ELSE;}
+elif {return ELIF;}
+
+
+
+
+
+\( {return PAREN_IZQ;}
+\) {return PAREN_DER;}
+\[ {return BRACKET_IZQ;}
+\] {return BRACKET_DER;}
+\{ {return LLAVE_IZQ;}
+\} {return LLAVE_DER;}
+
+
+
+
+\= {return IGUAL;}
+\!\= {return NO_IGUAL;}
+\=\= {return IGUAL_IGUAL;}
+
+
+\< {return MENOR_QUE;}
+\<\= {return MENOR_IGUAL;}
+\> {return MAYOR_QUE;}
+\>\= {return MAYOR_IGUAL;}
+
+
+\&\& {return AND;}
+\|\| {return OR;}
+
+
+
+\+ {return SUMA;}
+\- {return RESTA;}
+\* {return MULTIPLICACION;}
+\/ {return DIVISION;}
+
+
+[0-9]+(\.[0-9]+)   {yylval.float_value=atof(yytext);   return FLOAT;}
+[0-9]+ {yylval.int_value=atoi(yytext);   return INT;}
+
+
+Int|Float|String|Bool|None|int|float|string|bool|none|Void|void {yylval.string_value= strdup(yytext); return TYPE;}
+[a-zA-Z][a-zA-Z0-9]* {yylval.string_value= strdup(yytext); return ID;}
+
+
+
+
+[ \t]   ;
+\n   {}
+.   {return  yytext[0];}
+\".*\" {yylval.string_value= strdup(yytext); return STRING;}
+
+%%
+
+
+int yywrap() 
+{
+    return 1;
+}
+
+void yyerror(char *s) 
+{
+    if (parser_acumular_errores)
+        parser_acumular_errores([NSString stringWithFormat:@"%s", s]);
+        parser_terminar_programa();
+}
